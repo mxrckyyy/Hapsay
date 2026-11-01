@@ -113,11 +113,18 @@ companion documents explain it:
   "sunny weather", or forecasts until a real data source exists.
 - **No fake productivity metrics.** Numbers on the dashboard must be computed
   from real data or not shown.
-- **No premature database expansion.** The seeded `NoteEntity`/`NoteDao`
-  exist to verify the Room + KSP pipeline. Real entities/DAOs belong to their
-  feature phases.
-- **Do not delete tests.** The example tests are placeholders but they are
-  the only automated coverage — extend rather than remove.
+- **No premature database expansion.** The Notes data layer (schema v2:
+  `NoteEntity`, `NoteDao`, `NotesRepository(+Impl)`, `MIGRATION_1_2`) is
+  implemented as of Phase 3.1; further entities/DAOs (Expense, Event, Course)
+  still belong to their feature phases.
+- **Schema changes require an explicit migration.** Version bumps must add a
+  migration, register it in `ServiceLocator.addMigrations(...)` (never
+  `fallbackToDestructiveMigration`), and commit the KSP-exported schema JSON
+  under `app/schemas/`.
+- **Do not delete tests.** The template `ExampleUnitTest`/`ExampleInstrumentedTest`
+  and the Phase 3.1 instrumented Notes tests (`NoteDaoTest`,
+  `NotesRepositoryImplTest`) are the automated coverage — extend rather than
+  remove.
 - **Do not touch the Gradle wrapper, the daemon JVM toolchain file
   (`gradle/gradle-daemon-jvm.properties`), or build settings** unless a build
   failure requires it.
@@ -131,5 +138,7 @@ companion documents explain it:
 | Navigation graph | `presentation/navigation/` |
 | Manual DI | `core/di/ServiceLocator.kt` |
 | Room database | `core/database/AppDatabase.kt`, `data/entity/`, `data/dao/` |
+| Room schema JSON (generated) | `app/schemas/` |
+| Instrumented tests | `app/src/androidTest/` |
 | Build outputs | `app/build/outputs/apk/debug/` |
 | Status of every feature | `PROJECT_CONTEXT.md` |

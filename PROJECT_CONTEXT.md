@@ -24,9 +24,9 @@ weather, without juggling separate apps or paper notes.
 
 Native Android · Kotlin · Jetpack Compose + Material 3 · MVVM + light Clean
 Architecture (single module) · Navigation Compose (type-safe) · Room 2.8.5
-(KSP 2.3.12, no kapt) · Coroutines + StateFlow · Retrofit 3.0.0 +
-kotlinx-serialization (declared, unused so far) · manual `ServiceLocator`
-(no DI framework).
+(KSP 2.3.12, no kapt; schema JSON exported to `app/schemas/`) · Coroutines +
+StateFlow · Retrofit 3.0.0 + kotlinx-serialization (declared, unused so far) ·
+manual `ServiceLocator` (no DI framework).
 
 Exact versions and compatibility constraints: `ARCHITECTURE.md §1`.
 
@@ -35,10 +35,10 @@ Exact versions and compatibility constraints: `ARCHITECTURE.md §1`.
 ```
 com.campushelper.app
 ├── MainActivity.kt               # entry point only
-├── core/      database | di | network(EMPTY) | util(EMPTY)
-├── data/      entity(NoteEntity) | dao(NoteDao) | repository(EMPTY)
-├── domain/    model(EMPTY) | usecase(EMPTY)
-├── presentation/  app root + navigation + components + home + 4 placeholder features + weather(EMPTY)
+├── core/      database(v2 + MIGRATION_1_2) | di | network(EMPTY) | util(EMPTY)
+├── data/      entity(NoteEntity) | dao(NoteDao) | repository(NotesRepository + Impl)
+├── domain/    model(Note) | usecase(EMPTY)
+├── presentation/  app root + navigation + components + home + placeholder features + notes ViewModel + weather(EMPTY)
 └── ui/theme/  Color | Theme | Type | Spacing
 ```
 
@@ -55,7 +55,8 @@ Detailed tree with per-file notes: `ARCHITECTURE.md §2`.
 | Home dashboard | **IMPLEMENTED** | Header, real date, quick access, 4 honest result sections |
 | Schedule data (courses) | **PLANNED** | No Course storage yet; Home shows empty state |
 | Calendar / events data | **PLANNED** | No Event storage yet; Home shows empty state |
-| Notes CRUD | **PLANNED** | Seed `NoteEntity`/`NoteDao` exist for toolchain verification only |
+| Notes data layer | **IMPLEMENTED** (Phase 3.1) | Schema v2 `NoteEntity`, full `NoteDao`, `NotesRepository`(+Impl), domain `Note`, migration 1→2, schema export; instrumented-tested |
+| Notes UI (list/editor) | **PLANNED** | Placeholder screen remains; no ViewModel consumes the repository yet |
 | Expenses tracking | **PLANNED** | Nothing beyond placeholder screen |
 | Reminders/notifications for events | **PLANNED** | No WorkManager/notification code |
 | Cebu weather integration | **NOT AVAILABLE** | No API/network code; card explicitly says "Not available yet" |
@@ -90,23 +91,40 @@ Schedule and Calendar; quick-access opens all four feature destinations.
 
 ## 8. Database status
 
-- Room `AppDatabase` v1, `exportSchema = false`, DB name `campus-helper.db`.
-- Seed `NoteEntity` (id, title, body, updatedAt epoch millis) + `NoteDao`
-  (observe/insert/update/deleteById) — exist solely to verify the Room + KSP
-  pipeline; **not consumed by any UI yet**.
-- Planned entities: Expense, Event, Course (+ eventual schema export +
-  migrations). Protocol in `ARCHITECTURE.md §7`.
+- Room `AppDatabase` **v2**, `exportSchema = true` (KSP arg
+  `room.schemaLocation` → `app/schemas/com.campushelper.app.core.database.AppDatabase/2.json`,
+  committed), DB name `campus-helper.db`.
+- `NoteEntity` (IMPLEMENTED, Phase 3.1): columns `id`, `title`, `content`,
+  `created_at`, `updated_at` (epoch millis). Saved text is stored verbatim —
+  never trimmed or rewritten.
+- `NoteDao` (IMPLEMENTED): `observeAll` / `observeById` / `search`
+  (parameterized LIKE on title OR content) / `insert` / `update` /
+  `deleteById`; deterministic order `updated_at DESC, id DESC`.
+- `NotesRepository` + `NotesRepositoryImpl` (IMPLEMENTED): maps entity ↔
+  domain `Note`, exactly one `System.currentTimeMillis()` read per write
+  (`createdAt == updatedAt` on create; `createdAt` preserved and `updatedAt`
+  re-stamped on update), trims search input (blank = all notes). Provided by
+  `ServiceLocator.provideNotesRepository`.
+- Migration 1→2 (`AppDatabase.MIGRATION_1_2`, registered via
+  `addMigrations` in `ServiceLocator`): recreate-table pattern (API 26-safe)
+  — the seed's `body` became `content`, `created_at` backfilled from
+  `updated_at`. No destructive fallback.
+- Limitations: no consumer yet (Notes UI PLANNED — a user cannot reach the
+  database); no schema v1 JSON exists, so the 1→2 migration has no automated
+  regression test and the runtime old-version upgrade is unverified.
+- Planned entities: Expense, Event, Course. Protocol in `ARCHITECTURE.md §7`.
 
 ## 9. Current development phase
 
-**Phase 2 — Project documentation and engineering standards** (this file).
-Completed phases:
+**Phase 3.1 — Notes data foundation** (data layer behind the unchanged Notes
+placeholder screen). Completed phases:
 
 | Phase | Content | Result |
 |---|---|---|
 | 0 — Setup | Package rename to `com.campushelper.app`, architecture skeleton, Gradle/KSP/Room wiring | Build verified; app launched on emulator-5556 |
 | 1 — UI system + Home | Dark design system, 8 components, dashboard, honest empty states | Build + tests + emulator verification (screenshots, taps, scroll) |
-| **2 — Documentation** | **This document set** | Build/tests re-verified (see phase report) |
+| 2 — Documentation | This document set | Build/tests re-verified (see phase report) |
+| 3.1 — Notes data foundation | `NoteEntity` v2, `NoteDao`, `NotesRepository`(+Impl), domain `Note`, `MIGRATION_1_2`, KSP schema export | Build + unit tests green; **17 instrumented tests green** on emulator-5558 (records 0 failures) |
 
 ## 10. Build and test commands
 
@@ -114,6 +132,7 @@ Completed phases:
 gradlew.bat assembleDebug          :: debug APK -> app\build\outputs\apk\debug\
 gradlew.bat testDebugUnitTest      :: local unit tests
 gradlew.bat assembleDebugAndroidTest   :: compiles instrumented tests
+gradlew.bat connectedDebugAndroidTest  :: runs them on a connected emulator/device
 ```
 
 Optional device verification (when an emulator is online, e.g. `emulator-5556`):
@@ -124,22 +143,37 @@ adb shell am start -n com.campushelper.app/.MainActivity
 ```
 
 Note: `emulator-5554` historically shows as `offline` (ghost process); use a
-healthy `device`-state instance and report the device ID used.
+healthy `device`-state instance and report the device ID used. Phase 3.1 used
+a headless `emulator-5558` (`-no-window -gpu swiftshader_indirect`); system
+rendering may briefly lag after boot there — the app itself launches after a
+few seconds.
 
 ## 11. Known limitations
 
 1. **Dark-only theme** this phase; light theme planned.
-2. **No persisted user data yet** — notes/schedule/events/expenses are not stored; the DB pipeline is seeded but unused.
+2. **Notes data is not user-reachable yet** — the notes table (schema v2) and
+   its repository are implemented and tested, but no Notes UI/ViewModel
+   consumes them; the tab still shows the placeholder, so the table stays
+   empty in real use. Schedule/events/expenses remain un-stored.
 3. **No network layer usage** — Retrofit dependencies declared but no service/repository exists; the weather feature is intentionally placeholder.
 4. **Placeholder screens** for Notes/Expenses/Calendar/Schedule (shared `PlaceholderScreen`).
-5. **Minimal automated testing** — one template unit test; no instrumented UI tests.
+5. **Minimal automated testing** — one template unit test; instrumented testing exists for the Notes DAO/repository only.
 6. `material-icons-extended` inflates debug APK size (~18–19 MB); release R8 strips unused icons.
 7. Empty package directories are untracked by any future Git init until populated.
 8. Muted text color (~3.2:1) is limited to decorative/small text by guideline.
+9. **Room v1→v2 migration has no automated test and is runtime-unverified** —
+   no schema v1 JSON was ever exported (the seed phase ran with
+   `exportSchema = false`), so `MigrationTestHelper` cannot recreate the v1
+   state, and no pre-Phase-3.1 install was upgraded on a device. The
+   migration SQL is matched byte-for-byte against the KSP-generated v2
+   schema contract instead; from v2 onward every schema version is exported,
+   so future migrations can be regression-tested properly.
 
 ## 12. Development roadmap
 
-1. **Notes feature** — finalize Note model → repository (`data/repository/`) → domain model → Notes UI (list/editor) consuming the design system.
+1. **Notes UI** — Notes list/editor screen + `NotesViewModel`, the first
+   consumer of the Phase 3.1 data foundation
+   (`ServiceLocator.provideNotesRepository`), styled with the design system.
 2. **Expenses feature** — Expense entity/DAO/repository + summary/month totals.
 3. **Calendar feature** — Event storage + monthly UI + reminders (WorkManager; not yet added).
 4. **Schedule feature** — Course/weekly timetable storage + weekly grid UI.

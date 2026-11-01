@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Campus Helper</string>
+
+    <!-- Notes error states (UI_UX_GUIDELINES §8.5: errors are honest, never
+         fake success). Rendered by the upcoming Notes screen footer/banner;
+         the ViewModel exposes them as @StringRes Ints in NotesUiState today. -->
+    <string name="notes_error_load_failed">Couldn\'t load your notes. Please try again.</string>
+    <string name="notes_error_save_failed">Your change couldn\'t be saved. Please try again.</string>
 </resources>

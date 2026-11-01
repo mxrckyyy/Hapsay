@@ -51,16 +51,18 @@ both). Module: `:app` only.
 app/src/main/java/com/campushelper/app/
 ├── MainActivity.kt                      // entry point ONLY (hosts Compose UI)
 ├── core/
-│   ├── database/AppDatabase.kt          // Room @Database v1 (seed: Note)
+│   ├── database/AppDatabase.kt          // Room @Database v2 + MIGRATION_1_2 (Notes)
 │   ├── network/                         // EMPTY — planned weather service
-│   ├── di/ServiceLocator.kt             // manual DI singleton holder
+│   ├── di/ServiceLocator.kt             // manual DI: database + NotesRepository
 │   └── util/                            // EMPTY — planned helpers
 ├── data/
-│   ├── entity/NoteEntity.kt             // seed entity (verifies Room+KSP)
-│   ├── dao/NoteDao.kt                   // seed DAO (observer + CRUD skeleton)
-│   └── repository/                      // EMPTY — planned repositories
+│   ├── entity/NoteEntity.kt             // notes table row (id, title, content, created_at, updated_at)
+│   ├── dao/NoteDao.kt                   // notes queries (Flow observers + suspend CRUD/search)
+│   └── repository/
+│       ├── NotesRepository.kt           // Notes data boundary (interface)
+│       └── NotesRepositoryImpl.kt       // Room-backed impl: mappings, write stamps, search trim
 ├── domain/
-│   ├── model/                           // EMPTY — planned domain models
+│   ├── model/Note.kt                    // notes domain model (pure Kotlin, no Room/Android)
 │   └── usecase/                         // EMPTY — planned use cases
 ├── presentation/
 │   ├── CampusHelperApp.kt               // root Scaffold (single)
@@ -80,7 +82,9 @@ app/src/main/java/com/campushelper/app/
 │   ├── home/                            // IMPLEMENTED dashboard
 │   │   ├── HomeScreen.kt
 │   │   └── HomeViewModel.kt
-│   ├── notes/NotesScreen.kt             // placeholder
+│   ├── notes/
+│   │   ├── NotesScreen.kt               // placeholder (UI is PLANNED - Phase 3.3)
+│   │   └── NotesViewModel.kt            // IMPLEMENTED (Phase 3.2): NotesUiState + search + CRUD intents
 │   ├── expenses/ExpensesScreen.kt       // placeholder
 │   ├── calendar/CalendarScreen.kt       // placeholder
 │   ├── schedule/ScheduleScreen.kt       // placeholder
@@ -92,15 +96,26 @@ app/src/main/java/com/campushelper/app/
 └── res/ (values: strings, colors, themes; mipmap; xml backup rules)
 ```
 
-Note on empty packages: `core/network`, `core/util`, `data/repository`,
-`domain/model`, `domain/usecase`, and `presentation/weather` exist as
-directories on disk but contain zero files. They are intentional seams for
-the planned phases (Git would not track them until files appear — that is
-expected and not a defect).
+Note on empty packages: `core/network`, `core/util`, `domain/usecase`, and
+`presentation/weather` exist as directories on disk but contain zero files.
+They are intentional seams for the planned phases (Git would not track them
+until files appear — expected and not a defect). `data/repository` and
+`domain/model` joined the populated side in Phase 3.1 (Notes data foundation).
 
-Non-source code sets: `app/src/test/` (`ExampleUnitTest.kt`, compiles) and
-`app/src/androidTest/` (`ExampleInstrumentedTest.kt`, compiled via
-`assembleDebugAndroidTest`). Both were template examples and are kept.
+Generated artifact tracked in the repo:
+`app/schemas/com.campushelper.app.core.database.AppDatabase/2.json` — the
+Room schema export produced by KSP (`ksp { arg("room.schemaLocation",
+"$projectDir/schemas") }` in `app/build.gradle.kts`). Schema JSONs are
+committed exactly as generated; they document the contract every future
+migration must satisfy and are never hand-edited. Note: no `1.json` exists —
+export was off while the notes table was still the seed, so the v1→v2
+migration cannot be regression-tested with `MigrationTestHelper`.
+
+Non-source code sets: `app/src/test/` (`ExampleUnitTest.kt`) and
+`app/src/androidTest/` (`ExampleInstrumentedTest.kt`, `NoteDaoTest.kt`,
+`NotesRepositoryImplTest.kt`). The Notes DAO/repository tests run against an
+in-memory Room database via `gradlew.bat connectedDebugAndroidTest`; the
+template examples are kept.
 
 ### Package responsibilities
 
@@ -115,7 +130,8 @@ Non-source code sets: `app/src/test/` (`ExampleUnitTest.kt`, compiles) and
 ## 3. MVVM implementation
 
 **Reference implementation: `presentation/home/`** — copy its shape for every
-new feature.
+new feature. The Notes feature (`presentation/notes/NotesViewModel.kt`,
+Phase 3.2) extends the same scheme with repository-backed state.
 
 - **Screen** (`HomeScreen.kt`): collects its ViewModel's
   `StateFlow<HomeUiState>` with `collectAsStateWithLifecycle()`, renders
@@ -123,19 +139,27 @@ new feature.
   (`onOpenNotes`, `onOpenExpenses`, `onOpenCalendar`, `onOpenSchedule`). No
   ViewModel/DAO/repository/network imports beyond those needed for state
   collection — and no data classes from `data.*` are ever visible.
-- **ViewModel** (`HomeViewModel.kt`): owns the private
+- **ViewModel** (`HomeViewModel.kt`; first repo-backed case:
+  `NotesViewModel.kt`): owns the private
   `MutableStateFlow<UiState>` and exposes it through
   `val uiState: StateFlow<UiState> = _uiState.asStateFlow()`. Holds derived
-  state logic (e.g. the date formatting in Home). Future repository calls run
-  in `viewModelScope`; future user actions arrive via an `onAction(...)` hook.
-- **UI state:** immutable data classes (`HomeUiState`), always values, never
-  mutable references, including explicit flags for what has no data yet
-  (`hasScheduleToday`, `hasSavedEvents` — both false while no sources exist).
-- **Repository interaction:** today: none (no repositories exist). Planned:
-  ViewModel ← (use case)/repository → DAO. When repositories appear,
-  ViewModels obtain them through `ServiceLocator`, ideally injected via the
-  ViewModel constructor + `viewModel { }` factory — not by ServiceLocator
-  calls inside composables.
+  state logic (e.g. the date formatting in Home). Repository observation and
+  write calls run in `viewModelScope` (`NotesViewModel` does; Home has no
+  repository yet); user actions arrive via screen callbacks/handlers.
+- **UI state:** immutable data classes (`HomeUiState`, `NotesUiState`), always
+  values, never mutable references, including explicit flags for what has no
+  data yet (`hasScheduleToday`, `hasSavedEvents` — both false while no sources
+  exist). `NotesUiState` demonstrates the derived-flag pattern: `isEmpty` /
+  `hasSearchNoResults` are computed properties, not stored fields.
+- **Repository interaction:** `NotesViewModel` (Phase 3.2) is the first
+  repository-backed ViewModel: it receives `NotesRepository` via constructor
+  injection — the data-boundary **interface only**, never DAO/entity types —
+  supplied by `ServiceLocator.provideNotesRepository(context)`. The screen is
+  not wired yet (Notes tab still renders its placeholder), so the approved
+  creation seam is `NotesViewModel.Companion.create(context)`, to be called
+  from the future `viewModel { }` factory lambda (composition root).
+  Rule for every future feature: the repository arrives via constructor +
+  `viewModel { }` factory — never `ServiceLocator` calls inside composables.
 - **Lifecycle-aware collection:** `collectAsStateWithLifecycle()` keeps
   updates only while the screen is visible (androidx.lifecycle 2.11.0
   runtime-compose artifact).
@@ -148,10 +172,11 @@ MainActivity ──► CampusHelperApp (Scaffold+bottom bar) ──► CampusHel
                                               ▼ allowed at composition roots only
                                      ServiceLocator (core/di) ──► AppDatabase (core/database)
 
-Feature screen ──► its ViewModel ──► (planned) repository/use case ──► DAO/API
+Feature screen ──► its ViewModel ──► repository/use case ──► DAO/API
+                                                        (Notes: repository + ViewModel IMPLEMENTED, screen PLANNED)
 Feature screen ──► ui/theme tokens + components        (never data.*)
 data.*        ──► core.database only
-domain.*      ──► nothing Android-specific (planned pure Kotlin)
+domain.*      ──► nothing Android-specific (domain/model/Note is pure Kotlin)
 ```
 
 Forbidden:
@@ -165,15 +190,19 @@ Forbidden:
 `core/di/ServiceLocator.kt` — a manual, lazy singleton registry:
 
 ```kotlin
-ServiceLocator.provideAppDatabase(context)   // double-checked locking, reused instance
+ServiceLocator.provideAppDatabase(context)       // double-checked locking, reused instance
+ServiceLocator.provideNotesRepository(context)   // NotesRepositoryImpl wrapping the DB's NoteDao
 ```
 
 Rules:
 - It is the single place shared singletons are created. Add providers here
   (future: Retrofit service, data sources), never `Room.databaseBuilder(...)`
   in screens or random classes.
-- Nothing constructs `AppDatabase` anywhere else. (Today no caller uses it —
-  repositories will, in their phase.)
+- Nothing constructs `AppDatabase` anywhere else — the only consumer so far
+  is `provideNotesRepository`, which takes the database's `NoteDao`.
+- The Room builder registers every schema migration via
+  `addMigrations(AppDatabase.MIGRATION_1_2)`; destructive fallback is never
+  configured (see `AGENTS.md`).
 - No Hilt/Dagger/Koin — see `AGENTS.md` restriction #4.
 
 ## 6. Navigation architecture
@@ -196,21 +225,40 @@ Rules:
 
 ## 7. Database architecture
 
-- `AppDatabase` (`core/database/AppDatabase.kt`): Room 2.8.5, `version = 1`,
-  `exportSchema = false` (schema export turns on when the model is final),
-  currently registers the seed `NoteEntity` and exposes `noteDao()`.
-- Seed toolchain evidence: entities/DAOs currently exist to prove Room + KSP
-  (2.3.12) code generation works under AGP 9 built-in Kotlin; they are *not*
-  yet consumed by any UI. Real entities (Expense, Event, Course) and their
-  DAOs come with each feature phase; when the schema becomes real,
-  `room.schemaLocation` KSP argument is expected with `exportSchema = true`.
-- Naming/storage: database name `"campus-helper.db"` (app-local storage).
+- `AppDatabase` (`core/database/AppDatabase.kt`): Room 2.8.5, **`version = 2`**,
+  `exportSchema = true`, registers `NoteEntity` and exposes `noteDao()`.
+- Storage: database name `"campus-helper.db"` (app-local storage).
+- **Schema export:** `ksp { arg("room.schemaLocation", "$projectDir/schemas") }`
+  in `app/build.gradle.kts` writes
+  `app/schemas/com.campushelper.app.core.database.AppDatabase/2.json` on every
+  KSP run. That JSON is committed and is the reviewable source of truth for
+  what Room expects at version 2; never hand-edit it. Note: **no schema
+  `1.json` exists** — export was off while the notes table was still the seed,
+  so the 1→2 migration cannot be reproduced with `MigrationTestHelper`
+  (honest limitation; every future version bump must leave its JSON
+  committed so migrations stay testable).
+- **Migration 1 → 2 (`AppDatabase.MIGRATION_1_2`)** — the notes table was
+  finalized: the seed's `body` column became `content` and `created_at` was
+  added. SQLite's `RENAME COLUMN` needs SQLite 3.25 (≈ Android 9) and the
+  project supports API 26, so the portable recreate-table pattern is used:
+  create `notes_new`, copy rows
+  (`SELECT id, title, body, updated_at, updated_at FROM notes` — `created_at`
+  is backfilled from the row's own `updated_at`, the best derivable value),
+  drop `notes`, rename `notes_new` → `notes`. The temp-table DDL is
+  byte-for-byte the KSP-generated v2 `createSql` (only the table name
+  differs) so the post-migration table always passes Room's schema
+  validation. Registered on the builder in `ServiceLocator` via
+  `addMigrations(...)`; `fallbackToDestructiveMigration()` is never used.
+- Consumers: `NoteDao` is called only by `NotesRepositoryImpl`; no UI
+  consumes the repository yet (Notes UI is PLANNED — the data layer is
+  ready for it).
 - Expansion protocol: add entity → register in `@Database(entities=[...])`
-  → add DAO accessor → bump `version` → write migration (or agree on
-  destructive fallback policy explicitly in an issue — none chosen yet),
-  → build (`kspDebugKotlin` must pass).
+  → add DAO accessor → bump `version` → write an explicit migration and
+  register it in `ServiceLocator` → build (`kspDebugKotlin` must pass; the
+  new schema JSON must appear under `app/schemas/` and be committed).
+  Destructive fallback stays forbidden (`AGENTS.md`).
 - Data types note: timestamps are stored as epoch-millis `Long`
-  (`NoteEntity.updatedAt`) — consistent choice for future entities.
+  (`NoteEntity.createdAt`/`updatedAt`) — consistent choice for future entities.
 
 ## 8. Coding conventions (practical)
 
@@ -222,6 +270,11 @@ Rules:
   API, inferred inside scopes.
 - Coroutines: `viewModelScope`, `Flow` for streams, `suspend` for one-shot;
   no `GlobalScope`, no arbitrary thread `runBlocking` in UI code.
+- ViewModel unit tests: inject a fake of the repository interface (no Room),
+  override `Dispatchers.Main` with a `StandardTestDispatcher`, and drive
+  logical time with `kotlinx.coroutines.test` (`runTest`, `advanceTimeBy` —
+  this is how the 300 ms search debounce is covered). See
+  `presentation/notes/NotesViewModelTest.kt`.
 
 **Compose**
 - `modifier: Modifier = Modifier` is the **first optional parameter** of

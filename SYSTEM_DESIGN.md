@@ -28,7 +28,7 @@ Material 3. Full rules in `UI_UX_GUIDELINES.md`.
 | Module | Purpose | Status |
 |---|---|---|
 | **Home** | Student dashboard: greeting header, real current date, quick access to the other four destinations, today's schedule, upcoming events, Cebu weather card, productivity overview | **IMPLEMENTED** (honest empty states; no data sources yet) |
-| **Notes** | Create / edit / delete / view saved notes | **PLANNED** (currently renders a placeholder screen; seed `NoteEntity` + `NoteDao` exist to verify the Room pipeline) |
+| **Notes** | Create / edit / delete / view saved notes | **DATA LAYER + ViewModel IMPLEMENTED, UI PLANNED** (Phase 3.1 storage: `NoteEntity` v2 + `NoteDao` + `NotesRepository`; Phase 3.2 state management: `NotesViewModel` + `NotesUiState` with debounced reactive search and CRUD intents, unit-tested against a fake repository; the tab still renders a placeholder) |
 | **Expenses** | Record and categorize expenses, monthly history and totals | **PLANNED** (placeholder screen) |
 | **Calendar** | Monthly view of quizzes, deadlines, academic activities, reminders | **PLANNED** (placeholder screen) |
 | **Schedule** | Weekly class timetable: course, room, start/end times | **PLANNED** (placeholder screen) |
@@ -44,18 +44,18 @@ Target architecture (MVVM + lightweight Clean Architecture, single module):
 
 ```mermaid
 flowchart TB
-    subgraph P["Presentation Layer — IMPLEMENTED"]
+    subgraph P["Presentation Layer — Home + Notes(VM) IMPLEMENTED"]
         SCR["Compose screens + reusable components"]
-        VM["ViewModels — StateFlow<UiState>"]
+        VM["ViewModels (Home, Notes) - StateFlow of UiState"]
         NAV["Navigation Compose — type-safe routes"]
     end
-    subgraph D["Domain Layer — PLANNED"]
-        MOD["Domain models"]
-        UC["Use cases"]
+    subgraph D["Domain Layer — Notes model IMPLEMENTED, use cases PLANNED"]
+        MOD["Note (notes domain model)"]
+        UC["Use cases — PLANNED"]
     end
-    subgraph L["Data Layer — partially IMPLEMENTED"]
-        REPO["Repositories — PLANNED"]
-        DAO["Room DAOs — seed only"]
+    subgraph L["Data Layer — Notes IMPLEMENTED, weather PLANNED"]
+        REPO["NotesRepository + Impl — IMPLEMENTED"]
+        DAO["NoteDao (schema v2) — IMPLEMENTED"]
         API["Retrofit weather service — PLANNED"]
     end
     DB[("Local storage: Room")]
@@ -88,27 +88,46 @@ flowchart TB
    once a module stores data. A future weather service answers "right now"
    reads against the network and never pretends to be a database.
 
-**Current reality (honest):** today the app renders ViewModel state directly;
-there are no use cases, no repositories, and the seeded DAO is not yet
-consumed anywhere. The seed exists so the Room + KSP pipeline stays verified.
+**Current reality (honest):** the Home dashboard renders ViewModel state
+directly, and there are no use cases. The complete Notes chain below the
+screen is implemented and tested — data layer (Phase 3.1) *and* state
+management (Phase 3.2: `NotesViewModel` with debounced reactive search,
+CRUD intents and loading/error/empty states) — but **nothing consumes the
+ViewModel on screen yet**: the Notes tab still shows a placeholder, so a user
+cannot reach the notes database. Weather remains entirely unimplemented.
 
 ## 4. Data strategy
 
 - **Persistence:** Room 2.8.5, single `AppDatabase`
   (`core/database/AppDatabase.kt`), KSP annotation processing (no kapt).
-  Database file: `campus-helper.db` (app-local storage).
+  Database file: `campus-helper.db` (app-local storage). Schema version 2
+  with `exportSchema = true` — every version's JSON is exported to
+  `app/schemas/` and committed. Migrations are explicit
+  (`AppDatabase.MIGRATION_1_2`), registered through `ServiceLocator`'s
+  `addMigrations`, and never destructive. Honest limitation: schema v1 was
+  never exported, so the 1→2 migration has no automated regression test
+  (details in `ARCHITECTURE.md §7`).
 - **Entities (`data/entity/`):** describe how data is *stored* — table names,
-  column mappings. Seed status: `NoteEntity` (id, title, body, updatedAt in
-  epoch millis). Planned additions: Expense, Event, Course.
-- **DAOs (`data/dao/`):** one DAO per feature aggregate; declarative queries;
-  return `Flow` for observation and suspend functions for one-shot writes.
-  Seed status: `NoteDao` (observeAll / insert / update / deleteById).
+  column mappings. `NoteEntity` (IMPLEMENTED): columns `id`, `title`,
+  `content`, `created_at`, `updated_at` (epoch millis); the v1 seed's `body`
+  column became `content` in the 1→2 migration, and saved text is stored
+  verbatim (never trimmed). Planned additions: Expense, Event, Course.
+- **DAOs (`data/dao/`):** one DAO per feature aggregate; declarative,
+  parameterized queries; `Flow` for observation and suspend functions for
+  one-shot writes. `NoteDao` (IMPLEMENTED): `observeAll` / `observeById` /
+  `search` (parameterized LIKE over title OR content) / `insert` / `update` /
+  `deleteById`, deterministic ordering `updated_at DESC, id DESC`.
 - **Repositories (`data/repository/`):** single module boundary between data
   and domain/UI — own combining Room flows, mapping entities to domain
   models, and (later) network fallbacks. Repositories are the *only* callers
-  of DAOs and services.
+  of DAOs and services. `NotesRepository` + `NotesRepositoryImpl`
+  (IMPLEMENTED): exposes `Flow<List<Note>>`, observes one note, searches,
+  and stamps every write with exactly one `System.currentTimeMillis()` read
+  (`createdAt == updatedAt` on create; `createdAt` preserved, `updatedAt`
+  re-stamped on update). Search input is trimmed (blank query = all notes).
 - **Domain models (`domain/model/`):** immutable business objects the UI
-  consumes; presentation never depends on `data.*` types.
+  consumes; presentation never depends on `data.*` types. `Note` is the
+  first one (IMPLEMENTED, pure Kotlin).
 - **Screen state:** immutable `UiState` data classes exposed as
   `StateFlow` from ViewModels (reference implementation:
   `presentation/home/`).
@@ -144,6 +163,7 @@ New modules must integrate **without** restructuring the app:
 1. **Feature slice pattern:** entity → DAO (extend `AppDatabase`, bump
    version, add migration) → repository → domain model/use cases → ViewModel +
    screen → navigation wiring in `CampusHelperNavHost` (route + composable).
+   The Notes slice demonstrates the first four steps end-to-end (Phase 3.1).
 2. **Dashboard aggregation:** Home stays the one entry point: its ViewModel
    collects the repositories each section needs and folds them into
    `HomeUiState`; sections switch from empty states to real content with
