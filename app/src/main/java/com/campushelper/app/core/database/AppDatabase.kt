@@ -4,7 +4,9 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.campushelper.app.data.dao.ExpenseDao
 import com.campushelper.app.data.dao.NoteDao
+import com.campushelper.app.data.entity.ExpenseEntity
 import com.campushelper.app.data.entity.NoteEntity
 
 /**
@@ -22,17 +24,17 @@ import com.campushelper.app.data.entity.NoteEntity
  * to `content` and `created_at` was added.
  */
 @Database(
-    entities = [NoteEntity::class],
-    version = 2,
-    // The Notes model is final: each schema version is exported to
-    // app/schemas/ (ksp room.schemaLocation in app/build.gradle.kts) so
-    // migrations stay reviewable and testable going forward.
+    entities = [NoteEntity::class, ExpenseEntity::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
 
     /** Notes query surface. Only NotesRepositoryImpl may call this. */
     abstract fun noteDao(): NoteDao
+
+    /** Expenses query surface. Only ExpensesRepositoryImpl may call this. */
+    abstract fun expenseDao(): ExpenseDao
 
     companion object {
 
@@ -68,6 +70,39 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 db.execSQL("DROP TABLE notes")
                 db.execSQL("ALTER TABLE `notes_new` RENAME TO notes")
+            }
+        }
+
+        /**
+         * Schema v2 -> v3: adds the `expenses` table. Additive only - the
+         * existing `notes` table and all its rows are left untouched. No data
+         * migration is required because the table is new.
+         *
+         * The DDL is byte-for-byte the v3 createSql Room generated
+         * (app/schemas/.../3.json) with no table rename, so the result always
+         * matches what Room expects to find.
+         */
+        val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `expenses` " +
+                        "(`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`amount_minor` INTEGER NOT NULL, " +
+                        "`category` TEXT NOT NULL, " +
+                        "`expense_date_epoch_day` INTEGER NOT NULL, " +
+                        "`note` TEXT NOT NULL, " +
+                        "`created_at` INTEGER NOT NULL, " +
+                        "`updated_at` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_expenses_expense_date_epoch_day` " +
+                        "ON `expenses` (`expense_date_epoch_day`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_expenses_category` " +
+                        "ON `expenses` (`category`)",
+                )
             }
         }
     }

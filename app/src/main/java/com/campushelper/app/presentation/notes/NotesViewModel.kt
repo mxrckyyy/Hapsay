@@ -69,7 +69,7 @@ data class NotesUiState(
  * Data flow (dependency direction per ARCHITECTURE.md §4):
  *
  * ```
- * NotesScreen (planned) -- collects StateFlow, reports intents
+ * NotesScreen (implemented) -- collects StateFlow, reports intents
  *      |            ^
  *      v            |
  * supports this: NotesViewModel -- NotesRepository (interface only) -- ...

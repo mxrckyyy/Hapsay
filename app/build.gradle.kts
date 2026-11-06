@@ -45,6 +45,20 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// Bundle the exported Room schemas as androidTest assets so MigrationTestHelper
+// can recreate a previous schema version during migration tests. The source
+// files are named "<version>.json"; they are renamed to "<Database>_<version>.json"
+// to match MigrationTestHelper's lookup convention.
+val copyRoomSchemas by tasks.registering(Copy::class) {
+    // MigrationTestHelper looks for schema JSONs under
+    // assets/<fully.qualified.DatabaseClass>/<version>.json, which mirrors the
+    // KSP output layout under app/schemas/, so copy the whole tree verbatim.
+    from("$projectDir/schemas")
+    into("$projectDir/src/androidTest/assets")
+    include("**/*.json")
+}
+tasks.named("preBuild") { dependsOn(copyRoomSchemas) }
+
 dependencies {
     // Compose: UI artifact versions come from the Compose BOM alignment
     implementation(platform(libs.androidx.compose.bom))
@@ -83,6 +97,7 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.room.testing)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

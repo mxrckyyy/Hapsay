@@ -28,8 +28,8 @@ Material 3. Full rules in `UI_UX_GUIDELINES.md`.
 | Module | Purpose | Status |
 |---|---|---|
 | **Home** | Student dashboard: greeting header, real current date, quick access to the other four destinations, today's schedule, upcoming events, Cebu weather card, productivity overview | **IMPLEMENTED** (honest empty states; no data sources yet) |
-| **Notes** | Create / edit / delete / view saved notes | **DATA LAYER + ViewModel IMPLEMENTED, UI PLANNED** (Phase 3.1 storage: `NoteEntity` v2 + `NoteDao` + `NotesRepository`; Phase 3.2 state management: `NotesViewModel` + `NotesUiState` with debounced reactive search and CRUD intents, unit-tested against a fake repository; the tab still renders a placeholder) |
-| **Expenses** | Record and categorize expenses, monthly history and totals | **PLANNED** (placeholder screen) |
+| **Notes** | Create / edit / delete / view saved notes | **IMPLEMENTED** (Phase 3.1 storage, Phase 3.2 ViewModel, Phase 3.3 list screen, Phase 3.4 editor create/edit with unsaved-changes guard; deletion still PLANNED) |
+| **Expenses** | Record and review spending, monthly totals, category breakdown | **DATA LAYER IMPLEMENTED (Phase 4.1)** (`ExpenseEntity` schema v3 + `ExpenseDao` + `ExpensesRepository` + domain `Expense`/`ExpenseCategory`, migration 2→3 verified by `Migration_2_3_Test`); ViewModel/UI still PLANNED |
 | **Calendar** | Monthly view of quizzes, deadlines, academic activities, reminders | **PLANNED** (placeholder screen) |
 | **Schedule** | Weekly class timetable: course, room, start/end times | **PLANNED** (placeholder screen) |
 | **Weather (Cebu)** | Live local weather conditions/forecast on the Home dashboard | **NOT AVAILABLE** (no API integrated; the section explicitly says "Not available yet"; no network code exists) |
@@ -44,7 +44,7 @@ Target architecture (MVVM + lightweight Clean Architecture, single module):
 
 ```mermaid
 flowchart TB
-    subgraph P["Presentation Layer — Home + Notes(VM) IMPLEMENTED"]
+    subgraph P["Presentation Layer — Home + Notes IMPLEMENTED"]
         SCR["Compose screens + reusable components"]
         VM["ViewModels (Home, Notes) - StateFlow of UiState"]
         NAV["Navigation Compose — type-safe routes"]
@@ -53,9 +53,9 @@ flowchart TB
         MOD["Note (notes domain model)"]
         UC["Use cases — PLANNED"]
     end
-    subgraph L["Data Layer — Notes IMPLEMENTED, weather PLANNED"]
-        REPO["NotesRepository + Impl — IMPLEMENTED"]
-        DAO["NoteDao (schema v2) — IMPLEMENTED"]
+    subgraph L["Data Layer — Notes + Expenses IMPLEMENTED"]
+        REPO["NotesRepository + Impl; ExpensesRepository + Impl"]
+        DAO["NoteDao; ExpenseDao (schema v2/v3)"]
         API["Retrofit weather service — PLANNED"]
     end
     DB[("Local storage: Room")]
@@ -89,12 +89,11 @@ flowchart TB
    reads against the network and never pretends to be a database.
 
 **Current reality (honest):** the Home dashboard renders ViewModel state
-directly, and there are no use cases. The complete Notes chain below the
-screen is implemented and tested — data layer (Phase 3.1) *and* state
-management (Phase 3.2: `NotesViewModel` with debounced reactive search,
-CRUD intents and loading/error/empty states) — but **nothing consumes the
-ViewModel on screen yet**: the Notes tab still shows a placeholder, so a user
-cannot reach the notes database. Weather remains entirely unimplemented.
+directly, and there are no use cases. The Notes feature is now fully
+rendered end to end: list screen (Phase 3.3) with debounced search and
+loading/error/empty/no-results/success states, plus an editor (Phase 3.4)
+for create and edit with an unsaved-changes guard. What is still missing is
+deletion and any other data features; weather remains entirely unimplemented.
 
 ## 4. Data strategy
 
@@ -107,24 +106,20 @@ cannot reach the notes database. Weather remains entirely unimplemented.
   `addMigrations`, and never destructive. Honest limitation: schema v1 was
   never exported, so the 1→2 migration has no automated regression test
   (details in `ARCHITECTURE.md §7`).
-- **Entities (`data/entity/`):** describe how data is *stored* — table names,
-  column mappings. `NoteEntity` (IMPLEMENTED): columns `id`, `title`,
-  `content`, `created_at`, `updated_at` (epoch millis); the v1 seed's `body`
-  column became `content` in the 1→2 migration, and saved text is stored
-  verbatim (never trimmed). Planned additions: Expense, Event, Course.
+- **Entities (`data/entity/`):** describe how data is *stored*. `NoteEntity`
+  (IMPLEMENTED, v2) and `ExpenseEntity` (IMPLEMENTED, v3): money stored as
+  `amount_minor` (centavos, Long), dates as `expense_date_epoch_day` (epoch
+  days); saved text stored verbatim (never trimmed). Planned additions: Event,
+  Course.
 - **DAOs (`data/dao/`):** one DAO per feature aggregate; declarative,
   parameterized queries; `Flow` for observation and suspend functions for
-  one-shot writes. `NoteDao` (IMPLEMENTED): `observeAll` / `observeById` /
-  `search` (parameterized LIKE over title OR content) / `insert` / `update` /
-  `deleteById`, deterministic ordering `updated_at DESC, id DESC`.
+  one-shot writes. `NoteDao` (IMPLEMENTED) and `ExpenseDao` (IMPLEMENTED:
+  observeAll/observeById/observeByCategory/observeByDateRange/observeFiltered/
+  insert/update/deleteById).
 - **Repositories (`data/repository/`):** single module boundary between data
-  and domain/UI — own combining Room flows, mapping entities to domain
-  models, and (later) network fallbacks. Repositories are the *only* callers
-  of DAOs and services. `NotesRepository` + `NotesRepositoryImpl`
-  (IMPLEMENTED): exposes `Flow<List<Note>>`, observes one note, searches,
-  and stamps every write with exactly one `System.currentTimeMillis()` read
-  (`createdAt == updatedAt` on create; `createdAt` preserved, `updatedAt`
-  re-stamped on update). Search input is trimmed (blank query = all notes).
+  and domain/UI. `NotesRepository` + Impl (IMPLEMENTED) and `ExpensesRepository`
+  + Impl (IMPLEMENTED, Phase 4.1): observable flows, filtering, verbatim text,
+  one clock read per write. Repositories are the *only* callers of DAOs.
 - **Domain models (`domain/model/`):** immutable business objects the UI
   consumes; presentation never depends on `data.*` types. `Note` is the
   first one (IMPLEMENTED, pure Kotlin).

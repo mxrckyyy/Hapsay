@@ -6,4 +6,9 @@
          the ViewModel exposes them as @StringRes Ints in NotesUiState today. -->
     <string name="notes_error_load_failed">Couldn\'t load your notes. Please try again.</string>
     <string name="notes_error_save_failed">Your change couldn\'t be saved. Please try again.</string>
+
+    <!-- Note editor (Phase 3.4) -->
+    <string name="note_error_load_failed">Couldn\'t load this note. Please try again.</string>
+    <string name="note_error_save_failed">Your note couldn\'t be saved. Please try again.</string>
+    <string name="note_error_delete_failed">This note couldn\'t be deleted. Please try again.</string>
 </resources>

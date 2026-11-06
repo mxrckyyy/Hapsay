@@ -35,6 +35,9 @@ data object CalendarRoute
 @Serializable
 data object ScheduleRoute
 
+@Serializable
+data class NoteEditorRoute(val noteId: Long? = null)
+
 /** One entry in the bottom navigation bar: a label, an icon and its route. */
 data class TopLevelRoute<T : Any>(
     val name: String,

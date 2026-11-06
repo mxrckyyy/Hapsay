@@ -5,9 +5,11 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.toRoute
 import com.campushelper.app.presentation.calendar.CalendarScreen
 import com.campushelper.app.presentation.expenses.ExpensesScreen
 import com.campushelper.app.presentation.home.HomeScreen
+import com.campushelper.app.presentation.notes.NoteEditorScreen
 import com.campushelper.app.presentation.notes.NotesScreen
 import com.campushelper.app.presentation.schedule.ScheduleScreen
 
@@ -15,8 +17,8 @@ import com.campushelper.app.presentation.schedule.ScheduleScreen
  * The single navigation graph of the app.
  *
  * Feature screens are wired here (route -> screen); the screens themselves
- * live in their own feature packages. Feature implementations will be attached
- * to these destinations phase by phase.
+ * live in their own feature packages. Feature implementations are attached to
+ * these destinations phase by phase.
  */
 @Composable
 fun CampusHelperNavHost(
@@ -30,8 +32,6 @@ fun CampusHelperNavHost(
     ) {
         composable<HomeRoute> {
             HomeScreen(
-                // Home reports the user's intent; the navigation layer owns
-                // the actual navigation calls (unidirectional data flow).
                 onOpenNotes = { navController.navigateToTopLevel(NotesRoute) },
                 onOpenExpenses = { navController.navigateToTopLevel(ExpensesRoute) },
                 onOpenCalendar = { navController.navigateToTopLevel(CalendarRoute) },
@@ -39,7 +39,17 @@ fun CampusHelperNavHost(
             )
         }
         composable<NotesRoute> {
-            NotesScreen()
+            NotesScreen(
+                onAddNote = { navController.navigate(NoteEditorRoute()) },
+                onNoteClick = { noteId -> navController.navigate(NoteEditorRoute(noteId = noteId)) },
+            )
+        }
+        composable<NoteEditorRoute> { backStackEntry ->
+            val route = backStackEntry.toRoute<NoteEditorRoute>()
+            NoteEditorScreen(
+                noteId = route.noteId,
+                onBack = { navController.popBackStack() },
+            )
         }
         composable<ExpensesRoute> {
             ExpensesScreen()

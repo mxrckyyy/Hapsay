@@ -35,10 +35,10 @@ Exact versions and compatibility constraints: `ARCHITECTURE.md §1`.
 ```
 com.campushelper.app
 ├── MainActivity.kt               # entry point only
-├── core/      database(v2 + MIGRATION_1_2) | di | network(EMPTY) | util(EMPTY)
-├── data/      entity(NoteEntity) | dao(NoteDao) | repository(NotesRepository + Impl)
-├── domain/    model(Note) | usecase(EMPTY)
-├── presentation/  app root + navigation + components + home + placeholder features + notes ViewModel + weather(EMPTY)
+├── core/      database(v3 + MIGRATION_1_2 + MIGRATION_2_3) | di | network(EMPTY) | util(EMPTY)
+├── data/      entity(Note, Expense) | dao(Note, Expense) | repository(Notes, Expenses)
+├── domain/    model(Note, Expense, ExpenseCategory) | usecase(EMPTY)
+├── presentation/  app root + navigation + components + home + notes (screens + ViewModels) + weather(EMPTY)
 └── ui/theme/  Color | Theme | Type | Spacing
 ```
 
@@ -56,7 +56,12 @@ Detailed tree with per-file notes: `ARCHITECTURE.md §2`.
 | Schedule data (courses) | **PLANNED** | No Course storage yet; Home shows empty state |
 | Calendar / events data | **PLANNED** | No Event storage yet; Home shows empty state |
 | Notes data layer | **IMPLEMENTED** (Phase 3.1) | Schema v2 `NoteEntity`, full `NoteDao`, `NotesRepository`(+Impl), domain `Note`, migration 1→2, schema export; instrumented-tested |
-| Notes UI (list/editor) | **PLANNED** | Placeholder screen remains; no ViewModel consumes the repository yet |
+| Expenses data layer | **IMPLEMENTED** (Phase 4.1) | Schema v3 `ExpenseEntity`, full `ExpenseDao` (incl. category/date filters), `ExpensesRepository`(+Impl), domain `Expense`/`ExpenseCategory`, migration 2→3 verified by `Migration_2_3_Test`; amount stored as centavos, dates as epoch days |
+| Notes ViewModel | **IMPLEMENTED** (Phase 3.2) | `NotesViewModel` + `NotesUiState` (debounced reactive search, CRUD intents, loading/error/empty states); 12 unit tests against a fake repository |
+| Notes list screen | **IMPLEMENTED** (Phase 3.3) | Real list (LazyColumn keyed by id), debounced search, loading/error/empty/no-results states, green FAB; 5 Compose UI tests green on emulator-5556 |
+| Note editor (create/edit) | **IMPLEMENTED** (Phase 3.4) | `NoteEditorScreen` + `NoteEditorViewModel`: create/edit, validation, unsaved-changes guard (BackHandler + dialog), save error handling; 11 unit tests + 5 Compose UI tests green |
+| User-facing create/edit | **IMPLEMENTED** (Phase 3.4) | FAB opens editor; tap note opens editor; save persists via repository and returns to list |
+| User-facing deletion | **PLANNED** | No deletion UI (Phase 3.5) |
 | Expenses tracking | **PLANNED** | Nothing beyond placeholder screen |
 | Reminders/notifications for events | **PLANNED** | No WorkManager/notification code |
 | Cebu weather integration | **NOT AVAILABLE** | No API/network code; card explicitly says "Not available yet" |
@@ -91,33 +96,38 @@ Schedule and Calendar; quick-access opens all four feature destinations.
 
 ## 8. Database status
 
-- Room `AppDatabase` **v2**, `exportSchema = true` (KSP arg
-  `room.schemaLocation` → `app/schemas/com.campushelper.app.core.database.AppDatabase/2.json`,
+- Room `AppDatabase` **v3**, `exportSchema = true` (KSP arg
+  `room.schemaLocation` → `app/schemas/.../2.json` and `.../3.json`,
   committed), DB name `campus-helper.db`.
-- `NoteEntity` (IMPLEMENTED, Phase 3.1): columns `id`, `title`, `content`,
-  `created_at`, `updated_at` (epoch millis). Saved text is stored verbatim —
-  never trimmed or rewritten.
-- `NoteDao` (IMPLEMENTED): `observeAll` / `observeById` / `search`
-  (parameterized LIKE on title OR content) / `insert` / `update` /
-  `deleteById`; deterministic order `updated_at DESC, id DESC`.
-- `NotesRepository` + `NotesRepositoryImpl` (IMPLEMENTED): maps entity ↔
-  domain `Note`, exactly one `System.currentTimeMillis()` read per write
-  (`createdAt == updatedAt` on create; `createdAt` preserved and `updatedAt`
-  re-stamped on update), trims search input (blank = all notes). Provided by
-  `ServiceLocator.provideNotesRepository`.
-- Migration 1→2 (`AppDatabase.MIGRATION_1_2`, registered via
-  `addMigrations` in `ServiceLocator`): recreate-table pattern (API 26-safe)
-  — the seed's `body` became `content`, `created_at` backfilled from
-  `updated_at`. No destructive fallback.
-- Limitations: no consumer yet (Notes UI PLANNED — a user cannot reach the
-  database); no schema v1 JSON exists, so the 1→2 migration has no automated
-  regression test and the runtime old-version upgrade is unverified.
-- Planned entities: Expense, Event, Course. Protocol in `ARCHITECTURE.md §7`.
+- `NoteEntity` (IMPLEMENTED, v2): columns `id`, `title`, `content`,
+  `created_at`, `updated_at` (epoch millis).
+- `ExpenseEntity` (IMPLEMENTED, v3): columns `id`, `title`, `amount_minor`
+  (centavos, Long), `category` (stable id), `expense_date_epoch_day`
+  (epoch days), `note`, `created_at`, `updated_at`.
+- `NoteDao` (IMPLEMENTED): observeAll / observeById / search / insert / update /
+  deleteById; order `updated_at DESC, id DESC`.
+- `ExpenseDao` (IMPLEMENTED): observeAll / observeById / observeByCategory /
+  observeByDateRange / observeFiltered / insert / update / deleteById; order
+  `expense_date_epoch_day DESC, id DESC`.
+- `NotesRepository` + Impl (IMPLEMENTED): verbatim text, one clock read per
+  write, trims search input. Provided by `ServiceLocator.provideNotesRepository`.
+- `ExpensesRepository` + Impl (IMPLEMENTED, Phase 4.1): verbatim text, one
+  clock read per write, category/date filtering, category fallback to OTHER.
+  Provided by `ServiceLocator.provideExpensesRepository`.
+- Migration 1→2 (`MIGRATION_1_2`): recreate-table pattern (API 26-safe).
+- Migration 2→3 (`MIGRATION_2_3`): additive, creates `expenses` table +
+  two indexes; verified by `Migration_2_3_Test` (notes preserved, expenses
+  accepts/returns rows, indexes present). No destructive fallback.
+- Limitations: create, edit, and delete (Notes) are implemented (Phases 3.4/3.5).
+  No schema v1 JSON exists, so the 1→2 migration has no automated regression
+  test and the runtime old-version upgrade is unverified. The 2→3 migration
+  IS verified by `Migration_2_3_Test`.
+- Planned entities: Event, Course. Protocol in `ARCHITECTURE.md §7`.
 
 ## 9. Current development phase
 
-**Phase 3.1 — Notes data foundation** (data layer behind the unchanged Notes
-placeholder screen). Completed phases:
+**Phase 4.1 — Expenses data foundation** (complete; awaiting review before 4.2).
+Completed phases:
 
 | Phase | Content | Result |
 |---|---|---|
@@ -125,6 +135,12 @@ placeholder screen). Completed phases:
 | 1 — UI system + Home | Dark design system, 8 components, dashboard, honest empty states | Build + tests + emulator verification (screenshots, taps, scroll) |
 | 2 — Documentation | This document set | Build/tests re-verified (see phase report) |
 | 3.1 — Notes data foundation | `NoteEntity` v2, `NoteDao`, `NotesRepository`(+Impl), domain `Note`, `MIGRATION_1_2`, KSP schema export | Build + unit tests green; **17 instrumented tests green** on emulator-5558 (records 0 failures) |
+| 3.2 — Notes ViewModel | `NotesViewModel` + `NotesUiState` (debounced reactive search, CRUD intents, loading/error/empty states), fake-repository unit tests | Build green; **13 unit tests green** (1 template + 12 NotesViewModel) |
+| 3.3 — Notes screen | Real list, debounced search, loading/error/empty/no-results states, green FAB; Compose UI tests | Build green; **22 instrumented tests green** on emulator-5556 (5 new NotesScreen) |
+| 3.4 — Note editor | `NoteEditorScreen` + `NoteEditorViewModel` (create/edit, validation, unsaved-changes guard, save error handling); navigation route `NoteEditorRoute(noteId)` | Build green; **24 unit tests green** (1 + 11 + 12) and **27 instrumented tests green** on emulator-5556 (5 new NoteEditorScreen) |
+| 3.5 — Delete notes | Delete action + confirmation dialog in `NoteEditorScreen`/`NoteEditorViewModel`; permanent deletion via existing repository | Build green; **31 unit tests green** (1 + 12 + 18) and **33 instrumented tests green** on emulator-5556 (6 new delete tests) |
+| 3.6 — Notes final audit | Data integrity, ViewModel, UI, navigation, test, and documentation audit; minor cleanup fixes | Audit complete; no critical/high issues; 24 unit + 33 instrumented tests green |
+| 4.1 — Expenses data foundation | `Expense`/`ExpenseCategory` domain, `ExpenseEntity`, `ExpenseDao`, `ExpensesRepository`(+Impl), migration 2→3, ServiceLocator provider, schema export, domain/DAO/repository/migration tests | Build green; **8 unit tests green** (parse + category) and **25 instrumented tests green** (10 DAO + 6 repo + 1 migration) on emulator-5556 |
 
 ## 10. Build and test commands
 
@@ -151,10 +167,9 @@ few seconds.
 ## 11. Known limitations
 
 1. **Dark-only theme** this phase; light theme planned.
-2. **Notes data is not user-reachable yet** — the notes table (schema v2) and
-   its repository are implemented and tested, but no Notes UI/ViewModel
-   consumes them; the tab still shows the placeholder, so the table stays
-   empty in real use. Schedule/events/expenses remain un-stored.
+2. **User-facing deletion still unimplemented** — notes can now be created and
+   edited end to end, but there is no delete UI (Phase 3.5). Schedule/events/
+   expenses remain un-stored.
 3. **No network layer usage** — Retrofit dependencies declared but no service/repository exists; the weather feature is intentionally placeholder.
 4. **Placeholder screens** for Notes/Expenses/Calendar/Schedule (shared `PlaceholderScreen`).
 5. **Minimal automated testing** — one template unit test; instrumented testing exists for the Notes DAO/repository only.
@@ -171,10 +186,9 @@ few seconds.
 
 ## 12. Development roadmap
 
-1. **Notes UI** — Notes list/editor screen + `NotesViewModel`, the first
-   consumer of the Phase 3.1 data foundation
-   (`ServiceLocator.provideNotesRepository`), styled with the design system.
-2. **Expenses feature** — Expense entity/DAO/repository + summary/month totals.
+1. **Notes deletion** — delete UI (Phase 3.5) wiring into the existing
+   `NotesViewModel.deleteNote` API.
+2. **Expenses feature** — planning complete (`EXPENSES_PLAN.md`, Phase 4.0); implementation begins at 4.1 (data foundation).
 3. **Calendar feature** — Event storage + monthly UI + reminders (WorkManager; not yet added).
 4. **Schedule feature** — Course/weekly timetable storage + weekly grid UI.
 5. **Dashboard aggregation** — switch Home sections to real data (schedule today, upcoming events, notes count, monthly expenses).

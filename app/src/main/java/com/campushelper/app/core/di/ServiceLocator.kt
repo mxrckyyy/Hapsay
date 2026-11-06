@@ -3,6 +3,8 @@ package com.campushelper.app.core.di
 import android.content.Context
 import androidx.room.Room
 import com.campushelper.app.core.database.AppDatabase
+import com.campushelper.app.data.repository.ExpensesRepository
+import com.campushelper.app.data.repository.ExpensesRepositoryImpl
 import com.campushelper.app.data.repository.NotesRepository
 import com.campushelper.app.data.repository.NotesRepositoryImpl
 
@@ -27,6 +29,9 @@ object ServiceLocator {
     @Volatile
     private var notesRepository: NotesRepository? = null
 
+    @Volatile
+    private var expensesRepository: ExpensesRepository? = null
+
     /**
      * Returns the shared [AppDatabase], creating it on first use.
      *
@@ -50,7 +55,7 @@ object ServiceLocator {
                     // and ARCHITECTURE.md §7).
                     "campus-helper.db",
                 )
-                    .addMigrations(AppDatabase.MIGRATION_1_2)
+                    .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
                     .build()
                     .also { appDatabase = it }
             }
@@ -71,6 +76,24 @@ object ServiceLocator {
             } else {
                 NotesRepositoryImpl(provideAppDatabase(context).noteDao())
                     .also { notesRepository = it }
+            }
+        }
+    }
+
+    /**
+     * Returns the shared [ExpensesRepository], backed by the shared database.
+     * Same double-checked locking as the notes repository provider above.
+     */
+    fun provideExpensesRepository(context: Context): ExpensesRepository {
+        val existing = expensesRepository
+        if (existing != null) return existing
+        return synchronized(this) {
+            val again = expensesRepository
+            if (again != null) {
+                again
+            } else {
+                ExpensesRepositoryImpl(provideAppDatabase(context).expenseDao())
+                    .also { expensesRepository = it }
             }
         }
     }
