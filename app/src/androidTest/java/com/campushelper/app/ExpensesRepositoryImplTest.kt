@@ -106,6 +106,54 @@ class ExpensesRepositoryImplTest {
     }
 
     @Test
+    fun createExpense_rejectsZeroAmount_andPersistsNothing() = runBlocking {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                repository.createExpense("Lunch", 0L, ExpenseCategory.FOOD, 100L, "")
+            }
+        }
+        assertTrue(repository.expenses.first().isEmpty())
+    }
+
+    @Test
+    fun createExpense_rejectsNegativeAmount_andPersistsNothing() = runBlocking {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                repository.createExpense("Lunch", -50L, ExpenseCategory.FOOD, 100L, "")
+            }
+        }
+        assertTrue(repository.expenses.first().isEmpty())
+    }
+
+    @Test
+    fun updateExpense_rejectsZeroAmount_andPreservesStoredValue() = runBlocking {
+        val id = repository.createExpense("Lunch", 15050, ExpenseCategory.FOOD, 100L, "")
+        val before = repository.expenses.first().single { it.id == id }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                repository.updateExpense(before.copy(amountMinor = 0L))
+            }
+        }
+        val after = repository.expenses.first().single { it.id == id }
+        assertEquals(15050L, after.amountMinor)
+        assertEquals(before.updatedAt, after.updatedAt)
+    }
+
+    @Test
+    fun updateExpense_rejectsNegativeAmount_andPreservesStoredValue() = runBlocking {
+        val id = repository.createExpense("Lunch", 15050, ExpenseCategory.FOOD, 100L, "")
+        val before = repository.expenses.first().single { it.id == id }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            runBlocking {
+                repository.updateExpense(before.copy(amountMinor = -1L))
+            }
+        }
+        val after = repository.expenses.first().single { it.id == id }
+        assertEquals(15050L, after.amountMinor)
+        assertEquals(before.updatedAt, after.updatedAt)
+    }
+
+    @Test
     fun unknownCategoryInStorage_mapsToOther() = runBlocking {
         // Insert a row with an unknown category id directly via the DAO.
         database.expenseDao().insert(
@@ -123,3 +171,4 @@ class ExpensesRepositoryImplTest {
         assertEquals(ExpenseCategory.OTHER, loaded.category)
     }
 }
+

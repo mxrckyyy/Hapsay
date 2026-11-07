@@ -26,7 +26,8 @@ interface ExpensesRepository {
         endEpochDay: Long? = null,
     ): Flow<List<Expense>>
 
-    /** Creates an expense; stamps createdAt = updatedAt = now. Returns the new id. */
+    /** Creates an expense; stamps createdAt = updatedAt = now. Returns the new id.
+     *  Throws [IllegalArgumentException] if [amountMinor] is not positive. */
     suspend fun createExpense(
         title: String,
         amountMinor: Long,
@@ -35,7 +36,8 @@ interface ExpensesRepository {
         note: String,
     ): Long
 
-    /** Updates an expense: preserves id and createdAt, re-stamps updatedAt. */
+    /** Updates an expense: preserves id and createdAt, re-stamps updatedAt.
+     *  Throws [IllegalArgumentException] if [expense.amountMinor] is not positive. */
     suspend fun updateExpense(expense: Expense)
 
     /** Deletes an expense by id. No-op when the id is unknown. */

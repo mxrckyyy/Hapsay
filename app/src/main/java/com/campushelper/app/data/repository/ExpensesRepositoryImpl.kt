@@ -43,6 +43,13 @@ internal class ExpensesRepositoryImpl(
         expenseDateEpochDay: Long,
         note: String,
     ): Long {
+        // Enforce the domain invariant at the write boundary: a non-positive
+        // amount can never be persisted, even if a caller bypasses the
+        // amount parser (parseExpenseAmount). Throwing (not clamping) keeps
+        // the failure visible instead of silently storing bad data.
+        require(amountMinor > 0) {
+            "amountMinor must be a positive number of centavos, was $amountMinor"
+        }
         val timestamp = System.currentTimeMillis()
         return expenseDao.insert(
             ExpenseEntity(
@@ -58,6 +65,9 @@ internal class ExpensesRepositoryImpl(
     }
 
     override suspend fun updateExpense(expense: Expense) {
+        require(expense.amountMinor > 0) {
+            "amountMinor must be a positive number of centavos, was ${expense.amountMinor}"
+        }
         expenseDao.update(expense.toEntity(stamp = System.currentTimeMillis()))
     }
 
