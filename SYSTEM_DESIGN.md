@@ -29,7 +29,7 @@ Material 3. Full rules in `UI_UX_GUIDELINES.md`.
 |---|---|---|
 | **Home** | Student dashboard: greeting header, real current date, quick access to the other four destinations, today's schedule, upcoming events, Cebu weather card, productivity overview | **IMPLEMENTED** (honest empty states; no data sources yet) |
 | **Notes** | Create / edit / delete / view saved notes | **IMPLEMENTED** (Phase 3.1 storage, Phase 3.2 ViewModel, Phase 3.3 list screen, Phase 3.4 editor create/edit with unsaved-changes guard; deletion still PLANNED) |
-| **Expenses** | Record and review spending, monthly totals, category breakdown | **DATA LAYER IMPLEMENTED (Phase 4.1)** (`ExpenseEntity` schema v3 + `ExpenseDao` + `ExpensesRepository` + domain `Expense`/`ExpenseCategory`, migration 2→3 verified by `Migration_2_3_Test`); ViewModel/UI still PLANNED |
+| **Expenses** | Record and review spending, monthly totals, category breakdown | **DATA LAYER + ViewModel IMPLEMENTED (Phase 4.2)** (Phase 4.1 storage: `ExpenseEntity` v3 + `ExpenseDao` + `ExpensesRepository`; Phase 4.2 state management: `ExpensesViewModel` + `ExpensesUiState` with period/category filters and summary calculations, unit-tested against a fake repository; overview screen still PLANNED) |
 | **Calendar** | Monthly view of quizzes, deadlines, academic activities, reminders | **PLANNED** (placeholder screen) |
 | **Schedule** | Weekly class timetable: course, room, start/end times | **PLANNED** (placeholder screen) |
 | **Weather (Cebu)** | Live local weather conditions/forecast on the Home dashboard | **NOT AVAILABLE** (no API integrated; the section explicitly says "Not available yet"; no network code exists) |
@@ -44,9 +44,9 @@ Target architecture (MVVM + lightweight Clean Architecture, single module):
 
 ```mermaid
 flowchart TB
-    subgraph P["Presentation Layer — Home + Notes IMPLEMENTED"]
+    subgraph P["Presentation Layer — Home + Notes + Expenses(VM) IMPLEMENTED"]
         SCR["Compose screens + reusable components"]
-        VM["ViewModels (Home, Notes) - StateFlow of UiState"]
+        VM["ViewModels (Home, Notes, Expenses) - StateFlow of UiState"]
         NAV["Navigation Compose — type-safe routes"]
     end
     subgraph D["Domain Layer — Notes model IMPLEMENTED, use cases PLANNED"]

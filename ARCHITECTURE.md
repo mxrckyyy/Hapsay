@@ -96,7 +96,9 @@ app/src/main/java/com/campushelper/app/
 │   │   ├── NotesViewModel.kt            // IMPLEMENTED (Phase 3.2): NotesUiState + search + CRUD intents
 │   │   ├── NoteEditorScreen.kt          // IMPLEMENTED (Phase 3.4): create/edit editor, unsaved-changes guard
 │   │   └── NoteEditorViewModel.kt       // IMPLEMENTED (Phase 3.4): draft state, validation, save, dirty flag
-│   ├── expenses/ExpensesScreen.kt       // placeholder
+│   ├── expenses/
+│   │   ├── ExpensesScreen.kt            // placeholder (UI is PLANNED - Phase 4.3)
+│   │   └── ExpensesViewModel.kt         // IMPLEMENTED (Phase 4.2): ExpensesUiState + filters + summary
 │   ├── calendar/CalendarScreen.kt       // placeholder
 │   ├── schedule/ScheduleScreen.kt       // placeholder
 │   ├── weather/                         // EMPTY — planned weather section UI
@@ -143,7 +145,9 @@ template examples are kept.
 
 **Reference implementation: `presentation/home/`** — copy its shape for every
 new feature. The Notes feature (`presentation/notes/NotesViewModel.kt`,
-Phase 3.2) extends the same scheme with repository-backed state.
+Phase 3.2) and the Expenses feature
+(`presentation/expenses/ExpensesViewModel.kt`, Phase 4.2) extend the same
+scheme with repository-backed state.
 
 - **Screen** (`HomeScreen.kt`): collects its ViewModel's
   `StateFlow<HomeUiState>` with `collectAsStateWithLifecycle()`, renders
@@ -193,7 +197,7 @@ MainActivity ──► CampusHelperApp (Scaffold+bottom bar) ──► CampusHel
 
 Feature screen ──► its ViewModel ──► repository/use case ──► DAO/API
                                                         (Notes: repository + ViewModel + list + editor IMPLEMENTED; deletion IMPLEMENTED)
-                                                        (Expenses: data layer IMPLEMENTED (Phase 4.1); ViewModels/screens PLANNED)
+                                                        (Expenses: data layer + ViewModel IMPLEMENTED (Phase 4.2); screens PLANNED)
 Feature screen ──► ui/theme tokens + components        (never data.*)
 data.*        ──► core.database only
 domain.*      ──► nothing Android-specific (domain/model/Note is pure Kotlin)

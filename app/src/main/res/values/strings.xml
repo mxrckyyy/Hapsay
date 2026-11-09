@@ -11,4 +11,8 @@
     <string name="note_error_load_failed">Couldn\'t load this note. Please try again.</string>
     <string name="note_error_save_failed">Your note couldn\'t be saved. Please try again.</string>
     <string name="note_error_delete_failed">This note couldn\'t be deleted. Please try again.</string>
+
+    <!-- Expenses error states (Phase 4.2) -->
+    <string name="expenses_error_load_failed">Couldn\'t load your expenses. Please try again.</string>
+    <string name="expenses_error_overflow">Totals are too large to display. Please review your entries.</string>
 </resources>

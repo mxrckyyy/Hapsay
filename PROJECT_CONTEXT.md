@@ -38,7 +38,7 @@ com.campushelper.app
 ├── core/      database(v3 + MIGRATION_1_2 + MIGRATION_2_3) | di | network(EMPTY) | util(EMPTY)
 ├── data/      entity(Note, Expense) | dao(Note, Expense) | repository(Notes, Expenses)
 ├── domain/    model(Note, Expense, ExpenseCategory) | usecase(EMPTY)
-├── presentation/  app root + navigation + components + home + notes (screens + ViewModels) + weather(EMPTY)
+├── presentation/  app root + navigation + components + home + notes (screens + ViewModels) + expenses (ViewModel) + weather(EMPTY)
 └── ui/theme/  Color | Theme | Type | Spacing
 ```
 
@@ -56,8 +56,9 @@ Detailed tree with per-file notes: `ARCHITECTURE.md §2`.
 | Schedule data (courses) | **PLANNED** | No Course storage yet; Home shows empty state |
 | Calendar / events data | **PLANNED** | No Event storage yet; Home shows empty state |
 | Notes data layer | **IMPLEMENTED** (Phase 3.1) | Schema v2 `NoteEntity`, full `NoteDao`, `NotesRepository`(+Impl), domain `Note`, migration 1→2, schema export; instrumented-tested |
-| Expenses data layer | **IMPLEMENTED** (Phase 4.1) | Schema v3 `ExpenseEntity`, full `ExpenseDao` (incl. category/date filters), `ExpensesRepository`(+Impl), domain `Expense`/`ExpenseCategory`, migration 2→3 verified by `Migration_2_3_Test`; amount stored as centavos, dates as epoch days |
 | Notes ViewModel | **IMPLEMENTED** (Phase 3.2) | `NotesViewModel` + `NotesUiState` (debounced reactive search, CRUD intents, loading/error/empty states); 12 unit tests against a fake repository |
+| Expenses ViewModel | **IMPLEMENTED** (Phase 4.2) | `ExpensesViewModel` + `ExpensesUiState` (period/category filters, today/month totals, category breakdown, loading/error/empty); 21 unit tests against a fake repository; date source injectable via `Clock` |
+| Expenses UI (overview + editor) | **PLANNED** | Placeholder screen remains; no screen collects the ViewModel yet |
 | Notes list screen | **IMPLEMENTED** (Phase 3.3) | Real list (LazyColumn keyed by id), debounced search, loading/error/empty/no-results states, green FAB; 5 Compose UI tests green on emulator-5556 |
 | Note editor (create/edit) | **IMPLEMENTED** (Phase 3.4) | `NoteEditorScreen` + `NoteEditorViewModel`: create/edit, validation, unsaved-changes guard (BackHandler + dialog), save error handling; 11 unit tests + 5 Compose UI tests green |
 | User-facing create/edit | **IMPLEMENTED** (Phase 3.4) | FAB opens editor; tap note opens editor; save persists via repository and returns to list |
@@ -126,7 +127,7 @@ Schedule and Calendar; quick-access opens all four feature destinations.
 
 ## 9. Current development phase
 
-**Phase 4.1 — Expenses data foundation** (complete; awaiting review before 4.2).
+**Phase 4.2 — Expenses ViewModel** (complete; awaiting review before 4.3).
 Completed phases:
 
 | Phase | Content | Result |
@@ -141,6 +142,7 @@ Completed phases:
 | 3.5 — Delete notes | Delete action + confirmation dialog in `NoteEditorScreen`/`NoteEditorViewModel`; permanent deletion via existing repository | Build green; **31 unit tests green** (1 + 12 + 18) and **33 instrumented tests green** on emulator-5556 (6 new delete tests) |
 | 3.6 — Notes final audit | Data integrity, ViewModel, UI, navigation, test, and documentation audit; minor cleanup fixes | Audit complete; no critical/high issues; 24 unit + 33 instrumented tests green |
 | 4.1 — Expenses data foundation | `Expense`/`ExpenseCategory` domain, `ExpenseEntity`, `ExpenseDao`, `ExpensesRepository`(+Impl), migration 2→3, ServiceLocator provider, schema export, domain/DAO/repository/migration tests | Build green; **8 unit tests green** (parse + category) and **25 instrumented tests green** (10 DAO + 6 repo + 1 migration) on emulator-5556 |
+| 4.2 — Expenses ViewModel | `ExpensesViewModel` + `ExpensesUiState` (period/category filters, today/month totals, category breakdown, loading/error/empty); `ExpensePeriodFilter`, `CategoryTotal`; injectable `Clock`; 21 unit tests | Build green; **59 unit tests green** (1 + 3 + 4 + 18 + 12 + 21) |
 
 ## 10. Build and test commands
 
@@ -188,7 +190,7 @@ few seconds.
 
 1. **Notes deletion** — delete UI (Phase 3.5) wiring into the existing
    `NotesViewModel.deleteNote` API.
-2. **Expenses feature** — planning complete (`EXPENSES_PLAN.md`, Phase 4.0); implementation begins at 4.1 (data foundation).
+2. **Expenses feature** — data foundation (4.1) and ViewModel (4.2) implemented; overview/editor UI pending (4.3+).
 3. **Calendar feature** — Event storage + monthly UI + reminders (WorkManager; not yet added).
 4. **Schedule feature** — Course/weekly timetable storage + weekly grid UI.
 5. **Dashboard aggregation** — switch Home sections to real data (schedule today, upcoming events, notes count, monthly expenses).
